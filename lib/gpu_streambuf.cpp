@@ -49,9 +49,12 @@ std::streambuf::int_type gams::gpu_streambuf::underflow()
 
 std::streambuf::int_type gams::gpu_streambuf::sync()
 {
-	gpu_buffer->commit(); //unmap the host and device memory
-	setg(gpu_buffer->get_rd_first(), gpu_buffer->get_rd_last() + 1, gpu_buffer->get_rd_last());
-	setp(gpu_buffer->get_wr_first(), gpu_buffer->get_wr_last() + 1, gpu_buffer->get_wr_last());
-	gpu_buffer->prepare(); //remap
-	return std::streambuf::traits_type::not_eof(std::streambuf::traits_type::eof());
+	gpu_buffer->commit(); //unmap and write the host memory to device memory
+	if(gpu_buffer->prepare()) { //remap
+		setg(gpu_buffer->get_rd_first(), gpu_buffer->get_rd_last() + 1, gpu_buffer->get_rd_last());
+		setp(gpu_buffer->get_wr_first(), gpu_buffer->get_wr_last() + 1, gpu_buffer->get_wr_last());
+		return std::streambuf::traits_type::not_eof(std::streambuf::traits_type::eof());
+	} else {
+		return std::streambuf::traits_type::eof(); //todo: find a better error to return
+	}
 }
