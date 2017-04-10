@@ -3,15 +3,15 @@
 #include <iostream>
 #include <algorithm>
 
-gams::gpu_streambuf::gpu_streambuf(igpu_mem_buffer* gpu_buffer)
+gams::gpu_mapped_streambuf::gpu_mapped_streambuf(igpu_mem_buffer* gpu_buffer)
 	: gpu_buffer(gpu_buffer)
 {
-	sync();
+	sync(true);
 }
 
 gams::gpu_streambuf::~gpu_streambuf()
 {
-	sync();
+	sync(false);
 }
 
 std::streambuf::int_type gams::gpu_streambuf::overflow(std::streambuf::int_type value)
@@ -47,14 +47,29 @@ std::streambuf::int_type gams::gpu_streambuf::underflow()
 	return std::streambuf::traits_type::to_int_type(*gptr());
 }
 
+std::streambuf::int_type gams::gpu_streambuf::sync(bool prepare_after_commit)
+{
+	gpu_buffer->commit();
+	if(prepare_after_commit)
+	{
+		if(gpu_buffer->prepare()) 
+		{
+			setg(gpu_buffer->get_rd_first(), gpu_buffer->get_rd_last() + 1, gpu_buffer->get_rd_last());
+			setp(gpu_buffer->get_wr_first(), gpu_buffer->get_wr_last() + 1, gpu_buffer->get_wr_last());
+			return std::streambuf::traits_type::not_eof(std::streambuf::traits_type::eof());
+		} 
+		else 
+		{
+			return std::streambuf::traits_type::eof(); //todo: find a better error to return
+		}
+	}
+	else
+	{
+		return std::streambuf::traits_type::eof();
+	}
+}
+
 std::streambuf::int_type gams::gpu_streambuf::sync()
 {
-	gpu_buffer->commit(); //unmap and write the host memory to device memory
-	if(gpu_buffer->prepare()) { //remap
-		setg(gpu_buffer->get_rd_first(), gpu_buffer->get_rd_last() + 1, gpu_buffer->get_rd_last());
-		setp(gpu_buffer->get_wr_first(), gpu_buffer->get_wr_last() + 1, gpu_buffer->get_wr_last());
-		return std::streambuf::traits_type::not_eof(std::streambuf::traits_type::eof());
-	} else {
-		return std::streambuf::traits_type::eof(); //todo: find a better error to return
-	}
+	return sync(true);
 }
